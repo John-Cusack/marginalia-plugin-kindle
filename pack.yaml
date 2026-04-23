@@ -1,0 +1,26 @@
+name: kindle
+version: 0.1.0
+author: "MarginaliaAI"
+description: "Kindle Cloud Reader scraper — extracts book text via Playwright."
+
+requires:
+  core_api: ">=0.1.0,<1.0.0"
+  pip:
+    - "playwright>=1.40"
+  setup_commands:
+    - "playwright install chromium"
+
+permissions:
+  network: egress
+  network_allowlist: ["read.amazon.com", "amazon.com"]
+  subprocess: true
+  filesystem: read_write_plugin_data
+
+provides:
+  document_types:
+    - id: kindle_book
+      default_chunker: prose_window
+  mcp_tools:
+    - id: kindle.scrape_book
+      entry: code.tools.scrape_kindle_book:tool_handler
+      description: "Scrape full text of a Kindle book from Cloud Reader by ASIN."
