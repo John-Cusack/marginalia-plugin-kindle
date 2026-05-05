@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from kindle import _scrape
-from kindle._paths import text_path_for
 
 
 class _FakeBrowserSession:

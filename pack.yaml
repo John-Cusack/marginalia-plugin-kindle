@@ -1,5 +1,5 @@
 name: kindle
-version: 0.2.1
+version: 0.3.0
 author: "MarginaliaAI"
 description: "Kindle Cloud Reader scraper — extracts book text via Playwright and ingests it into the corpus."
 
@@ -9,6 +9,10 @@ requires:
     - "playwright>=1.40"
     - "pytesseract>=0.3.10"
     - "pillow>=10.0"
+    # GPU-accelerated OCR for canvas/Kryptonite-rendered books. Pulls torch as
+    # a transitive dep, but core already requires torch for embeddings so this
+    # is usually a no-op install.
+    - "easyocr>=1.7"
   setup_commands:
     - "playwright install chromium"
 

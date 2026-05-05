@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.3.0 — 2026-05-05
+
+### Added
+- **Kryptonite reader support.** Amazon's new in-browser KCR renderer
+  ("Kryptonite") draws book content via WebGL and exposes no extractable text
+  in the DOM. The scraper now detects Kryptonite by its
+  `webpackManifest_Kryptonite*` window marker, waits the longer warm-up the
+  new shell needs (~12s vs the classic 5s), and switches to a screenshot+OCR
+  per-page extraction path. Header/footer chrome bands are cropped before OCR
+  so the title bar and "Location N of M" indicator don't get duplicated on
+  every page.
+- **GPU-accelerated OCR via EasyOCR.** New `kindle.scraper.ocr` module owns
+  a lazily-cached `easyocr.Reader(["en"], gpu=True)`. Reuses the user's
+  existing CUDA stack (already present for BGE embeddings) so first-call
+  cost is the model load (~3s) and ~64MB of one-time downloads. Steady-state
+  OCR is ~0.3-1s per page on a consumer GPU.
+- New dependency: `easyocr>=1.7` (declared in both `pack.yaml.requires.pip`
+  and `pyproject.toml`).
+- Title fallback for Kryptonite mode: when the classic title selectors miss,
+  pull the first non-chrome line of `body.innerText` (skipping "Kindle
+  Library", "Location N of M", and the "Learning reading speed..." status).
+
+### Notes
+- This release does not regress the classic-KCR path; books that aren't on
+  Kryptonite still use the DOM extractor and the existing tesseract fallback
+  for image-rendered pages.
+- 31/31 unit tests pass (added 11: 4 OCR module, 7 reader Kryptonite
+  routing).
+
 ## 0.2.1 — 2026-05-05
 
 ### Fixed
