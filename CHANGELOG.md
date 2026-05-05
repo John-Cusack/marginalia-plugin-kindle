@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.1 — 2026-05-05
+
+### Fixed
+- **Kryptonite books now actually start at page 1.** In 0.3.0,
+  `_navigate_to_start` only knew the classic-KCR controls (Home key, header
+  menu's "Go to Beginning") — Kryptonite ignores both, so KCR served whatever
+  page it remembered from the user's previous session. The first full-book
+  scrape of *Shield of Achilles* missed the cover, dedication, table of
+  contents, preface, and the first ~2% of the introduction.
+  Fix: in Kryptonite mode, set `#kr-scrubber-bar.value = 0` and dispatch
+  `ionChange` + `ionInput`. KCR repaginates to Location 1. Falls through to
+  the classic path if the scrubber isn't present (defensive).
+
+### Added
+- 4 unit tests covering the navigate-to-start branching: scrubber happy path,
+  scrubber-missing fallthrough, evaluate-throws fallthrough, and that
+  classic-mode never touches the scrubber.
+
+### Tests
+- 35/35 unit pass (added 4).
+
 ## 0.3.0 — 2026-05-05
 
 ### Added

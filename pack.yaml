@@ -1,5 +1,5 @@
 name: kindle
-version: 0.3.0
+version: 0.3.1
 author: "MarginaliaAI"
 description: "Kindle Cloud Reader scraper — extracts book text via Playwright and ingests it into the corpus."
 

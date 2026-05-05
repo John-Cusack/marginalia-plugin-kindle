@@ -128,7 +128,7 @@ async def scrape_book(
     log.info("book_title_extracted", title=title, mode="kryptonite" if is_kryptonite else "dom")
 
     # Try to navigate to the beginning
-    await _navigate_to_start(page)
+    await _navigate_to_start(page, is_kryptonite=is_kryptonite)
     await page.wait_for_timeout(2000)
 
     # Re-acquire content frame after navigation
@@ -327,16 +327,58 @@ async def _extract_title(page, content_frame, *, is_kryptonite: bool = False) ->
     return "Unknown Title"
 
 
-async def _navigate_to_start(page) -> None:
-    """Attempt to navigate to the beginning of the book."""
-    # Try pressing Home key
+# Set the Kryptonite scrubber bar to its minimum and emit the events Ionic
+# listens to. This is the only reliable "go to beginning" path we've found
+# on the new reader — Home key, chevron menu, and the URL itself all leave
+# you at KCR's last-known reading position. Returns ``true`` on success so
+# the Python caller can verify the affordance was present.
+_KRYPTONITE_GO_TO_START_JS = r"""
+() => {
+    const scrubber = document.querySelector('#kr-scrubber-bar');
+    if (!scrubber) return false;
+    try {
+        scrubber.value = 0;
+        scrubber.dispatchEvent(new CustomEvent('ionChange', {detail: {value: 0}}));
+        scrubber.dispatchEvent(new CustomEvent('ionInput', {detail: {value: 0}}));
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+"""
+
+
+async def _navigate_to_start(page, *, is_kryptonite: bool = False) -> None:
+    """Attempt to navigate to the beginning of the book.
+
+    KCR remembers the last-read position per book, so a fresh ``page.goto``
+    drops you back where you stopped. Both reader generations are handled:
+
+    - Classic KCR responds to the Home key and a "Go to Beginning" menu item.
+    - Kryptonite ignores both. The progress scrubber (``#kr-scrubber-bar``)
+      *does* accept a programmatic ``value = 0`` plus the matching ``ionChange``
+      and ``ionInput`` Ionic events — that's the reliable path we use here.
+    """
+    if is_kryptonite:
+        try:
+            ok = await page.evaluate(_KRYPTONITE_GO_TO_START_JS)
+            if ok:
+                # KCR repaginates after the scrubber move; give it time.
+                await page.wait_for_timeout(3000)
+                log.info("kryptonite_navigated_to_start")
+                return
+            log.warning("kryptonite_scrubber_missing")
+        except Exception as exc:
+            log.warning("kryptonite_navigate_failed", error=str(exc))
+        # Fall through to the classic path as a last resort.
+
+    # Classic KCR — Home key, then chevron-menu "Go to Beginning".
     try:
         await page.keyboard.press("Home")
         await page.wait_for_timeout(1000)
     except Exception:
         pass
 
-    # Try clicking a "Go to Beginning" menu option if available
     try:
         menu_btn = await page.query_selector(
             '#kr-header-menu, [aria-label="Menu"], .header-menu-btn'

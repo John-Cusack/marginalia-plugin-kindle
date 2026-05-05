@@ -132,3 +132,75 @@ async def test_extract_text_kryptonite_returns_empty_on_ocr_error(monkeypatch):
     monkeypatch.setattr(reader.kindle_ocr, "ocr_image_bytes", boom)
     page = _FakePage()
     assert await reader._extract_text_kryptonite(page) == ""
+
+
+class _FakeKeyboard:
+    def __init__(self):
+        self.calls: list[str] = []
+
+    async def press(self, key: str):
+        self.calls.append(key)
+
+
+class _NavPage:
+    """Page stub for _navigate_to_start that records JS evals + key presses."""
+
+    def __init__(self, *, scrubber_returns: bool = True, eval_raises: bool = False):
+        self._scrubber_returns = scrubber_returns
+        self._eval_raises = eval_raises
+        self.eval_calls: list[str] = []
+        self.timeouts: list[int] = []
+        self.keyboard = _FakeKeyboard()
+
+    async def evaluate(self, js: str):
+        self.eval_calls.append(js)
+        if self._eval_raises:
+            raise RuntimeError("evaluate failed")
+        return self._scrubber_returns
+
+    async def wait_for_timeout(self, ms: int):
+        self.timeouts.append(ms)
+
+    async def query_selector(self, sel: str):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_navigate_to_start_uses_scrubber_in_kryptonite_mode():
+    page = _NavPage(scrubber_returns=True)
+    await reader._navigate_to_start(page, is_kryptonite=True)
+
+    assert len(page.eval_calls) == 1
+    assert "#kr-scrubber-bar" in page.eval_calls[0]
+    assert "ionChange" in page.eval_calls[0]
+    # Got the post-scrubber repaginate wait but did NOT fall through to Home.
+    assert page.timeouts == [3000]
+    assert page.keyboard.calls == []
+
+
+@pytest.mark.asyncio
+async def test_navigate_to_start_falls_through_when_scrubber_missing():
+    page = _NavPage(scrubber_returns=False)
+    await reader._navigate_to_start(page, is_kryptonite=True)
+
+    # Scrubber JS was tried, returned false → fall through to classic path.
+    assert page.keyboard.calls == ["Home"]
+
+
+@pytest.mark.asyncio
+async def test_navigate_to_start_falls_through_on_evaluate_error():
+    page = _NavPage(eval_raises=True)
+    await reader._navigate_to_start(page, is_kryptonite=True)
+
+    # Evaluate raised → swallowed → fall through to classic Home key.
+    assert page.keyboard.calls == ["Home"]
+
+
+@pytest.mark.asyncio
+async def test_navigate_to_start_classic_mode_skips_scrubber():
+    page = _NavPage(scrubber_returns=True)
+    await reader._navigate_to_start(page, is_kryptonite=False)
+
+    # is_kryptonite=False → never touches the scrubber.
+    assert page.eval_calls == []
+    assert page.keyboard.calls == ["Home"]
