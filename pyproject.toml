@@ -1,0 +1,45 @@
+[project]
+name = "marginalia-plugin-kindle"
+version = "0.2.0"
+description = "Kindle Cloud Reader scraper and ingestion plugin for Corpus Engine"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = [
+    "playwright>=1.40",
+    "pytesseract>=0.3.10",
+    "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["kindle"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "TCH"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# Scraper module is pre-existing 0.1.0 code — keep lint clean on the new
+# tool/SDK-facing surface while leaving the scraper internals untouched.
+"kindle/scraper/auth.py" = ["TC001"]
+"kindle/scraper/browser.py" = ["SIM105"]
+"kindle/scraper/reader.py" = ["UP031"]
+

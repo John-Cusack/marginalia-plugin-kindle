@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
 
-from playwright.async_api import async_playwright, Browser, BrowserContext, Playwright
+from playwright.async_api import Browser, BrowserContext, Playwright, async_playwright
 
 from .anti_detect import random_user_agent
 
@@ -82,6 +81,7 @@ async def create_browser(headless: bool = False) -> BrowserSession:
             "--disable-blink-features=AutomationControlled",
             "--no-first-run",
             "--no-default-browser-check",
+            "--start-maximized",
         ],
     )
     context = await browser.new_context(

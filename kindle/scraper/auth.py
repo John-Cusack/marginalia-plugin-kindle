@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from .browser import BrowserSession
 from ..session.cookies import CookieStore
+from .browser import BrowserSession
 
 log = logging.getLogger(__name__)
 
@@ -82,8 +82,8 @@ async def _is_authenticated(page) -> bool:
     url = page.url
     if "signin" in url.lower() or "ap/signin" in url.lower():
         return False
-    if "read.amazon.com" in url and "signin" not in url.lower():
-        return True
+    # When ambiguous (no login or library selectors matched), default to
+    # not authenticated so the user gets the manual login prompt.
     return False
 
 

@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 from typing import Any
+
+import pytesseract
+from PIL import Image
 
 from .anti_detect import humanize_mouse, jittered_delay
 
@@ -123,6 +127,9 @@ async def scrape_book(
             log.warning("Text extraction failed on page %d: %s", page_count, exc)
             text = ""
 
+        if not text:
+            text = await _extract_text_via_ocr(content_frame)
+
         if text and text not in seen_texts:
             seen_texts.add(text)
             all_text.append(text)
@@ -169,13 +176,36 @@ async def scrape_book(
     }
 
 
+async def _extract_text_via_ocr(frame) -> str:
+    """Fall back to OCR when DOM extraction yields no text (image-rendered pages)."""
+    try:
+        # Try to find the full-page image element
+        img_el = await frame.query_selector(".kg-full-page-img img")
+        if not img_el:
+            img_el = await frame.query_selector("#kr-renderer img")
+
+        target = img_el if img_el else await frame.query_selector("#kr-renderer")
+        if not target:
+            return ""
+
+        screenshot_bytes = await target.screenshot(type="png")
+        image = Image.open(io.BytesIO(screenshot_bytes))
+        text = pytesseract.image_to_string(image).strip()
+        if text:
+            log.debug("OCR fallback extracted %d chars", len(text))
+        return text
+    except Exception as exc:
+        log.warning("OCR fallback failed: %s", exc)
+        return ""
+
+
 async def _get_content_frame(page):
     """Return the KCR iframe frame if present, otherwise the page itself."""
     for frame in page.frames:
         if _IFRAME_NAME.lower() in frame.name.lower():
             return frame
     # Try to find iframe by selector
-    iframe_el = await page.query_selector(f'iframe[id*="Kindle"], iframe[name*="Kindle"]')
+    iframe_el = await page.query_selector('iframe[id*="Kindle"], iframe[name*="Kindle"]')
     if iframe_el:
         frame = await iframe_el.content_frame()
         if frame:
