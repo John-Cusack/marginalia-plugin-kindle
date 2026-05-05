@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.1 — 2026-05-05
+
+### Fixed
+- **Empty-text scrapes no longer write a 0-byte cache file.** In 0.2.0, if a
+  scrape produced no text (canvas-rendered KF8 book, captcha shown by Amazon,
+  or DOM drift), `scrape_to_disk` still wrote an empty `.txt` to the extracted
+  cache. A subsequent `kindle.ingest_book` call would see the file, skip
+  scraping, and immediately return `error_type: empty_text` — a sticky failure
+  with no diagnostic value. Now `scrape_to_disk` only writes when text is
+  non-empty, so retries actually re-scrape.
+- **Plugin progress is now visible.** Scraper modules used stdlib `logging`,
+  but core configures `structlog` only — so every page-by-page log line was
+  silently dropped. All plugin modules now use `structlog.get_logger` with
+  event-style `(event, key=value)` calls, matching the convention in core /
+  acad / logos.
+
+### Added
+- 3 regression tests for `_scrape.scrape_to_disk` covering the no-empty-write
+  invariant.
+
+### Tested
+- 20/20 unit tests pass (was 17 in 0.2.0).
+- Lint clean.
+
 ## 0.2.0 — 2026-05-05
 
 **Breaking — requires `research-engine >= 0.2.0`.**

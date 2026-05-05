@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 
+import structlog
 from playwright.async_api import Browser, BrowserContext, Playwright, async_playwright
 
 from .anti_detect import random_user_agent
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 STEALTH_INIT_SCRIPT = """
 () => {
@@ -72,7 +72,7 @@ async def create_browser(headless: bool = False) -> BrowserSession:
         headless: Run headless (not recommended for auth — Amazon detects it).
     """
     ua = random_user_agent()
-    log.info("Launching browser (headless=%s, ua=%s)", headless, ua[:50])
+    log.info("launching_browser", headless=headless, ua=ua[:50])
 
     pw = await async_playwright().start()
     browser = await pw.chromium.launch(

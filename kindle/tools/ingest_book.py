@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 
+import structlog
 from research_engine.plugins.sdk import tool
 from research_engine.services.ingestion.chunking.prose_window import ProseWindowChunker
 
 from .._paths import text_path_for
 from .._scrape import scrape_to_disk
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 @tool(
@@ -111,8 +111,14 @@ async def handler(
         return {
             "status": "error",
             "error_type": "empty_text",
-            "message": f"No text available for {book_asin} (file: {text_path}).",
+            "message": (
+                f"Scrape produced no text for {book_asin}. The book may be "
+                "canvas-rendered (KF8 fixed-layout), or KCR may have shown a "
+                "captcha/sign-in page. Open the book manually in the same "
+                "browser profile to diagnose, then retry."
+            ),
             "asin": book_asin,
+            "page_count": page_count,
         }
 
     metadata = {

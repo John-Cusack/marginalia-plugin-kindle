@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
-log = logging.getLogger(__name__)
+import structlog
+
+log = structlog.get_logger(__name__)
 
 
 class CookieStore:
@@ -18,16 +19,16 @@ class CookieStore:
     def load(self) -> list[dict]:
         """Load cookies from disk. Returns empty list on missing/corrupt file."""
         if not self.path.exists():
-            log.debug("No cookie file at %s", self.path)
+            log.debug("no_cookie_file", path=str(self.path))
             return []
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
             if isinstance(data, list):
                 return data
-            log.warning("Cookie file is not a list, ignoring: %s", self.path)
+            log.warning("cookie_file_not_a_list", path=str(self.path))
             return []
         except (json.JSONDecodeError, OSError) as exc:
-            log.warning("Failed to load cookies from %s: %s", self.path, exc)
+            log.warning("cookie_load_failed", path=str(self.path), error=str(exc))
             return []
 
     def save(self, cookies: list[dict]) -> None:
@@ -37,10 +38,10 @@ class CookieStore:
             json.dumps(cookies, indent=2, default=str),
             encoding="utf-8",
         )
-        log.debug("Saved %d cookies to %s", len(cookies), self.path)
+        log.debug("cookies_saved", count=len(cookies), path=str(self.path))
 
     def clear(self) -> None:
         """Delete the cookie file if it exists."""
         if self.path.exists():
             self.path.unlink()
-            log.debug("Cleared cookies at %s", self.path)
+            log.debug("cookies_cleared", path=str(self.path))

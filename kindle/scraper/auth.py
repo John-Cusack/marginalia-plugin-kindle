@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+
+import structlog
 
 from ..session.cookies import CookieStore
 from .browser import BrowserSession
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 KINDLE_URL = "https://read.amazon.com/"
 
@@ -45,28 +46,28 @@ async def ensure_authenticated(
     if not force_reauth:
         cookies = cookie_store.load()
         if cookies:
-            log.info("Loading %d cached cookies", len(cookies))
+            log.info("cookies_loaded", count=len(cookies))
             await session.context.add_cookies(cookies)
 
     await page.goto(KINDLE_URL, wait_until="domcontentloaded")
     await page.wait_for_timeout(3000)
 
     if await _is_authenticated(page):
-        log.info("Already authenticated via cached cookies")
+        log.info("already_authenticated")
         cookies = await session.context.cookies()
         cookie_store.save(cookies)
         await page.close()
         return
 
     log.info(
-        "Not authenticated — please log in manually in the browser window. "
-        "You have up to 5 minutes."
+        "manual_login_required",
+        message="Please log in to Amazon in the visible browser window (up to 5 minutes).",
     )
     await _wait_for_auth(page, timeout_seconds=300)
 
     cookies = await session.context.cookies()
     cookie_store.save(cookies)
-    log.info("Authentication successful, cookies saved")
+    log.info("authenticated")
     await page.close()
 
 

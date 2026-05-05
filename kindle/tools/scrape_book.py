@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import logging
-
+import structlog
 from research_engine.plugins.sdk import tool
 
 from .._scrape import scrape_to_disk
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 @tool(
@@ -57,17 +56,30 @@ async def handler(
             page_delay_max=page_delay_max,
             max_pages=max_pages,
         )
+        text = result["text"]
+        if not text.strip():
+            return {
+                "status": "error",
+                "error_type": "empty_text",
+                "message": (
+                    f"Scrape produced no text for {book_asin}. The book may be "
+                    "canvas-rendered (KF8 fixed-layout) or KCR may have shown a "
+                    "captcha/sign-in page instead of the book."
+                ),
+                "asin": book_asin,
+                "page_count": result.get("page_count"),
+            }
         return {
             "status": "success",
             "asin": book_asin,
             "title": result["title"],
             "page_count": result["page_count"],
-            "text_length": len(result["text"]),
-            "text_preview": result["text"][:500],
+            "text_length": len(text),
+            "text_preview": text[:500],
             "output_path": result["output_path"],
         }
     except TimeoutError as exc:
-        log.error("Timeout scraping %s: %s", book_asin, exc)
+        log.error("scrape_timeout", asin=book_asin, error=str(exc))
         return {
             "status": "error",
             "error_type": "timeout",
@@ -75,7 +87,7 @@ async def handler(
             "asin": book_asin,
         }
     except Exception as exc:
-        log.error("Failed to scrape %s: %s", book_asin, exc, exc_info=True)
+        log.exception("scrape_failed", asin=book_asin, error=str(exc))
         return {
             "status": "error",
             "error_type": type(exc).__name__,

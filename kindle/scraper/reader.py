@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import io
-import logging
 from typing import Any
 
 import pytesseract
+import structlog
 from PIL import Image
 
 from .anti_detect import humanize_mouse, jittered_delay
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 KINDLE_READER_URL = "https://read.amazon.com/?asin={asin}"
 
@@ -92,14 +92,14 @@ async def scrape_book(
     """
     page = await context.new_page()
     url = KINDLE_READER_URL.format(asin=book_asin)
-    log.info("Opening book %s at %s", book_asin, url)
+    log.info("opening_book", asin=book_asin, url=url)
 
     await page.goto(url, wait_until="domcontentloaded")
     await page.wait_for_timeout(5000)
 
     content_frame = await _get_content_frame(page)
     title = await _extract_title(page, content_frame)
-    log.info("Book title: %s", title)
+    log.info("book_title_extracted", title=title)
 
     # Try to navigate to the beginning
     await _navigate_to_start(page)
@@ -116,7 +116,7 @@ async def scrape_book(
 
     while True:
         if max_pages is not None and page_count >= max_pages:
-            log.info("Reached max_pages limit (%d)", max_pages)
+            log.info("reached_max_pages", max_pages=max_pages)
             break
 
         # Extract text from current page
@@ -124,7 +124,7 @@ async def scrape_book(
             text = await content_frame.evaluate(_EXTRACT_TEXT_JS)
             text = text.strip() if text else ""
         except Exception as exc:
-            log.warning("Text extraction failed on page %d: %s", page_count, exc)
+            log.warning("text_extraction_failed", page=page_count, error=str(exc))
             text = ""
 
         if not text:
@@ -134,13 +134,13 @@ async def scrape_book(
             seen_texts.add(text)
             all_text.append(text)
             consecutive_empty = 0
-            log.debug("Page %d: extracted %d chars", page_count, len(text))
+            log.debug("page_extracted", page=page_count, chars=len(text))
         else:
             consecutive_empty += 1
             if consecutive_empty >= max_consecutive_empty:
                 log.info(
-                    "Stopping: %d consecutive empty/duplicate pages",
-                    consecutive_empty,
+                    "scraping_stopped_no_progress",
+                    consecutive_empty=consecutive_empty,
                 )
                 break
 
@@ -148,7 +148,7 @@ async def scrape_book(
 
         # Check if we're at the last page
         if await _is_last_page(page, content_frame):
-            log.info("Reached last page at page %d", page_count)
+            log.info("reached_last_page", page=page_count)
             break
 
         # Human-like behavior between page turns
@@ -165,7 +165,9 @@ async def scrape_book(
 
     combined_text = "\n\n".join(all_text)
     log.info(
-        "Scraping complete: %d pages, %d chars", page_count, len(combined_text)
+        "scraping_complete",
+        pages=page_count,
+        chars=len(combined_text),
     )
 
     await page.close()
@@ -192,10 +194,10 @@ async def _extract_text_via_ocr(frame) -> str:
         image = Image.open(io.BytesIO(screenshot_bytes))
         text = pytesseract.image_to_string(image).strip()
         if text:
-            log.debug("OCR fallback extracted %d chars", len(text))
+            log.debug("ocr_extracted", chars=len(text))
         return text
     except Exception as exc:
-        log.warning("OCR fallback failed: %s", exc)
+        log.warning("ocr_failed", error=str(exc))
         return ""
 
 
