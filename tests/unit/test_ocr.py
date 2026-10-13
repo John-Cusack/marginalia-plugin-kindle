@@ -8,6 +8,11 @@ import pytest
 
 pytest.importorskip("PIL")
 
+import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
+
 from PIL import Image
 
 from kindle.scraper import ocr
@@ -79,3 +84,38 @@ def test_reset_reader_clears_cache():
     ocr._reader = object()  # type: ignore[attr-defined]
     ocr.reset_reader()
     assert ocr._reader is None  # type: ignore[attr-defined]
+
+
+def test_concurrent_local_reader_initialization_loads_only_once(monkeypatch):
+    entered = threading.Event()
+    release = threading.Event()
+    second_started = threading.Event()
+    duplicate = threading.Event()
+    instances = []
+
+    def construct(*args, **kwargs):
+        instance = _FakeReader()
+        instances.append(instance)
+        if len(instances) > 1:
+            duplicate.set()
+        entered.set()
+        assert release.wait(3)
+        return instance
+
+    monkeypatch.setitem(sys.modules, "easyocr", SimpleNamespace(Reader=construct))
+
+    def second():
+        second_started.set()
+        return ocr._get_reader()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(ocr._get_reader)
+        assert entered.wait(2)
+        later = pool.submit(second)
+        try:
+            assert second_started.wait(2)
+            assert not duplicate.wait(0.1)
+        finally:
+            release.set()
+        assert first.result() is later.result()
+    assert len(instances) == 1
