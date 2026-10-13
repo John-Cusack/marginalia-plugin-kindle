@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from research_engine.plugins.sdk import tool
+from research_engine_sdk import tool
 
 from .._paths import EXTRACTED_DIR
 
