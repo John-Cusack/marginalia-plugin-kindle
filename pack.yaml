@@ -12,13 +12,17 @@ requires:
     # GPU-accelerated OCR for canvas/Kryptonite-rendered books. Pulls torch as
     # a transitive dep, but core already requires torch for embeddings so this
     # is usually a no-op install.
-    - "easyocr>=1.7"
+    - "easyocr==1.7.2"
+    - "httpx>=0.27"
+    - "structlog>=24.0"
+    - "marginalia-ai-sdk>=0.6.1,<1"
   setup_commands:
     - "playwright install chromium"
 
 permissions:
   network: egress
-  network_allowlist: ["read.amazon.com", "amazon.com"]
+  # Amazon plus an operator-configured OCR host; no fixed GPU host in the pack.
+  network_allowlist: []
   subprocess: true
   filesystem: read_write_plugin_data
   ingest: true

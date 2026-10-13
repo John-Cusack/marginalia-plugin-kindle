@@ -1,0 +1,18 @@
+[Unit]
+Description=Marginalia Kindle CUDA OCR service
+After=network-online.target
+
+[Service]
+Type=simple
+# The env file is optional. Its defaults are model english_g2 and loopback:9883.
+# Set KINDLE_OCR_MODEL, KINDLE_OCR_BIND_HOST, and KINDLE_OCR_PORT there as needed.
+EnvironmentFile=-%h/.config/marginalia-kindle-ocr.env
+WorkingDirectory=%h/.local/share/marginalia-kindle-ocr
+ExecStart=%h/.local/share/marginalia-kindle-ocr/venv/bin/python -m kindle.ocr_server
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=240
+TimeoutStopSec=180
+
+[Install]
+WantedBy=default.target
