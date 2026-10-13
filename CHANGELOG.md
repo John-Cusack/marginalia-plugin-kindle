@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Opt-in, in-memory numbered PNG batches for Kryptonite OCR on a remote CUDA
+  host, with local default and whole-batch fallback. Final partial batches,
+  page limits, deduplication, and no-progress termination retain page order.
+- Dedicated Kindle-owned FastAPI service and user systemd unit, versioned
+  EasyOCR 1.7.2/Craft/recognizer handshake, bounded uploads, serialized GPU
+  inference, and responsive health checks. No core server change.
+- Explicit `python -m kindle.ocr_control start|stop|status`: healthy and skipped
+  paths perform no host control; scrapes and failures never stop a service.
+- Environment-only endpoint, SSH target, model, batch, retry, and deadline
+  configuration. Deployment and privacy guidance in README.
+
+### Fixed
+- Use the public `research_engine_sdk` tool decorator instead of the removed
+  `research_engine.plugins.sdk` import, verified with published core 0.6.2.
+- Serialize local reader initialization/inference when remote fallback runs
+  in worker threads. Queued remote uploads wait before allocating a full body;
+  canceled requests keep the GPU slot until their worker finishes.
+
+### Verification
+- Synthetic CUDA HTTP OCR returned invented page markers in order. Warm,
+  four-page 1280×780 synthetic batch: CPU 514.39 s, remote 0.963 s including
+  transport (534.2×); browser delays and model warm-up excluded. This synthetic
+  CPU workload was much slower than the established ~13 s/book-page observation;
+  it is not a real-book speedup forecast. Full method and settings in README.
+
 ## 0.3.1 — 2026-05-05
 
 ### Fixed
