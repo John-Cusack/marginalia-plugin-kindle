@@ -138,29 +138,59 @@ stop; no idle shutdown, scrape-exit stop, or failure-triggered stop is issued.
 The host's user systemd manager must remain available; enabling user lingering,
 if required by its login policy, is an operator/admin decision.
 
-Default bind is `127.0.0.1:9883`. Recommended encrypted transport:
+Default bind is `127.0.0.1:9883`. When both machines use Tailscale, prefer
+**direct HTTP over Tailscale**, like the embedding service: no laptop tunnel
+or foreground process is needed. SSH is used only for unit control.
+
+On the GPU host, set `KINDLE_OCR_BIND_HOST` to its Tailscale IPv4 address
+(reported by `tailscale ip -4`) in `~/.config/marginalia-kindle-ocr.env`.
+Keep `KINDLE_OCR_PORT=9883`. To apply a bind change, restart only the OCR unit
+when no scrape is using it. From the laptop:
+
+```bash
+ssh "$OCR_SSH_TARGET" 'systemctl --user restart marginalia-kindle-ocr.service'
+```
+
+The unit exists on the GPU host, not the laptop; running bare `systemctl --user`
+on the laptop controls the wrong machine. Set `OCR_TAILSCALE_IP` to the GPU
+host's actual address, then configure the laptop process:
+
+```bash
+export KINDLE_OCR_BASE_URL="http://${OCR_TAILSCALE_IP}:9883"
+export KINDLE_OCR_SSH_TARGET="$OCR_SSH_TARGET"
+```
+
+Allow the scraper to reach port 9883 through the tailnet ACL/host firewall.
+Bind only to the Tailscale address, not `0.0.0.0`: the service is unauthenticated
+and **must never be exposed to an untrusted network**.
+
+If direct Tailscale access is unsuitable, keep the loopback bind and use an
+optional SSH forward instead:
 
 ```bash
 ssh -N -o ExitOnForwardFailure=yes \
   -L 18883:127.0.0.1:9883 "$OCR_SSH_TARGET"
 export KINDLE_OCR_BASE_URL=http://127.0.0.1:18883
-export KINDLE_OCR_SSH_TARGET="$OCR_SSH_TARGET"
 ```
 
-Alternatively, set `KINDLE_OCR_BIND_HOST` to the host's Tailscale interface in
-`~/.config/marginalia-kindle-ocr.env`, then use that interface's HTTP endpoint.
-The service is unauthenticated: **never expose it to an untrusted network**.
 The plugin's network permission allows egress because the OCR host is chosen
 at runtime; the operator controls the destination. HTTP clients ignore
 environment proxies, send no Amazon credentials, and do not follow redirects.
 
 ### Control
 
+From this checkout, set `OCR_CLIENT_ENV_FILE` to the **absolute path** of the
+saved laptop `.env` containing the OCR settings, then run:
+
 ```bash
-python -m kindle.ocr_control start
-python -m kindle.ocr_control status
-python -m kindle.ocr_control stop
+uv run --env-file "$OCR_CLIENT_ENV_FILE" --no-sync \
+  python -m kindle.ocr_control status
 ```
+
+Use `start` or `stop` in place of `status`. Kindle reads process environment
+variables; it does not load `.env` itself. The core/plugin launcher must load
+the same file into its environment too. Different worktrees may have different
+`.env` copies: do not assume `$PWD/.env` is the file you edited.
 
 `start` (also used before a remote scrape) reports `started`,
 `already-running`, or `skipped`. A healthy, compatible CUDA endpoint returns
@@ -175,6 +205,11 @@ No path implicitly stops a service, including startup timeout.
 `status` reports `already-running`, `warming`, `inactive`, or `skipped`;
 it never mutates the unit. Explicit `stop` reports `stopped`/`skipped` and
 intentionally works even with `KINDLE_OCR_MANAGE_GPU=never`.
+
+`status=skipped` means no endpoint was loaded; `warming` means a compatible
+endpoint is not yet warm, or the unit is active but HTTP health is unreachable.
+Neither result proves that remote OCR is usable. A running loopback-only unit
+cannot be reached through a direct Tailscale endpoint.
 
 ### Configuration
 

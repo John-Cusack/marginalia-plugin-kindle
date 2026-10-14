@@ -20,6 +20,8 @@
 - Serialize local reader initialization/inference when remote fallback runs
   in worker threads. Queued remote uploads wait before allocating a full body;
   canceled requests keep the GPU slot until their worker finishes.
+- Deployment guidance uses direct Tailscale HTTP without a laptop tunnel,
+  remote-only unit restarts, and explicit client dotenv loading across worktrees.
 
 ### Verification
 - Synthetic CUDA HTTP OCR returned invented page markers in order. Warm,
@@ -27,6 +29,8 @@
   transport (534.2×); browser delays and model warm-up excluded. This synthetic
   CPU workload was much slower than the established ~13 s/book-page observation;
   it is not a real-book speedup forecast. Full method and settings in README.
+- Live laptop-to-GPU direct Tailscale OCR verified warm CUDA readiness and
+  ordered recognition of two invented page markers.
 
 ## 0.3.1 — 2026-05-05
 
