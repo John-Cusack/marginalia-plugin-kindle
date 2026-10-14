@@ -1,0 +1,103 @@
+schema_version: 2
+plugin_id: kindle
+
+requires:
+  core_api: ">=0.6,<0.7"
+  python: ">=3.11"
+
+permissions:
+  network: egress
+  # Amazon plus an operator-configured OCR host; no fixed GPU host in the pack.
+  network_allowlist: []
+  # Playwright drives a Chromium subprocess; OCR control may run ssh.
+  subprocess: true
+  filesystem: read_write_plugin_data
+  ingest: true
+
+provides:
+  document_types:
+    - id: kindle_book
+      default_chunker: prose_window
+
+  # Core serves each handler's @tool metadata; the operator approves this copy.
+  # tests/integration/test_built_wheel.py holds the two equal.
+  mcp_tools:
+    - id: kindle.scrape_book
+      entry: kindle.tools.scrape_book:handler
+      description: >-
+        Scrape the full text of a Kindle book from Cloud Reader by ASIN and save it
+        to ~/.marginalia/plugins/kindle/extracted/{asin}.txt. Does NOT ingest into the
+        corpus — use kindle.ingest_book for that.
+      input_schema:
+        type: object
+        properties:
+          book_asin:
+            type: string
+            description: The ASIN of the book (e.g. 'B003NX6Z3W').
+          force_reauth:
+            type: boolean
+            default: false
+            description: Force a fresh Amazon login, ignoring cached cookies.
+          page_delay_min: {type: number, default: 1.5}
+          page_delay_max: {type: number, default: 4.0}
+          max_pages:
+            type: [integer, "null"]
+            default: null
+            description: Stop after N pages (null = scrape entire book).
+        required: [book_asin]
+
+    - id: kindle.ingest_book
+      entry: kindle.tools.ingest_book:handler
+      description: >-
+        Scrape a Kindle book by ASIN (or reuse the on-disk cache) and ingest it into
+        the corpus as document_type='kindle_book'. Idempotent: returns the existing
+        document_id if the book has already been ingested.
+      input_schema:
+        type: object
+        properties:
+          book_asin:
+            type: string
+            description: The ASIN of the book to ingest.
+          rescrape:
+            type: boolean
+            default: false
+            description: >-
+              If true, scrape fresh from Cloud Reader even if a cached text file
+              exists on disk.
+          force_reingest:
+            type: boolean
+            default: false
+            description: >-
+              If true, ingest a new document even if one already exists for this
+              ASIN. (Will create a duplicate; useful for re-chunking after a rescrape.)
+          force_reauth: {type: boolean, default: false}
+          page_delay_min: {type: number, default: 1.5}
+          page_delay_max: {type: number, default: 4.0}
+          max_pages: {type: [integer, "null"], default: null}
+        required: [book_asin]
+
+    - id: kindle.check_book
+      entry: kindle.tools.check_book:handler
+      description: >-
+        Check whether a Kindle book is on disk (scraped) and/or already ingested into
+        the corpus. Looks up by ASIN.
+      input_schema:
+        type: object
+        properties:
+          book_asin:
+            type: string
+            description: The ASIN to check.
+        required: [book_asin]
+
+    - id: kindle.list_books
+      entry: kindle.tools.list_books:handler
+      description: >-
+        List Kindle books known to the plugin. Combines locally-scraped text files
+        with corpus documents that look like Kindle ingests, joined on ASIN.
+      input_schema:
+        type: object
+        properties:
+          include_ingested:
+            type: boolean
+            default: true
+            description: If true, look up matching corpus documents.

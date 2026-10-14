@@ -1,6 +1,6 @@
 [project]
 name = "marginalia-plugin-kindle"
-version = "0.3.1"
+version = "0.4.0"
 description = "Kindle Cloud Reader scraper and ingestion plugin for Corpus Engine"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -26,6 +26,9 @@ dev = [
     "ruff>=0.5",
     "marginalia-ai>=0.6.2,<1",
 ]
+
+[project.entry-points."research_engine.plugins"]
+kindle = "kindle"
 
 [build-system]
 requires = ["hatchling"]
