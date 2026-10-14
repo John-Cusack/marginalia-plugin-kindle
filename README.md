@@ -5,16 +5,44 @@ Kindle Cloud Reader pack for [MarginaliaAI](https://github.com/MarginaliaAI). Sc
 ## Prerequisites
 
 - Python 3.11+
-- A compatible MarginaliaAI core installation (tested with published `0.6.2`; tools use the public `research_engine_sdk`)
+- A compatible MarginaliaAI core installation, `>=0.6,<0.7` (tested with published `0.6.2` and workspace `0.6.3`; tools use the public `research_engine_sdk`)
 - An Amazon account with the books in your Kindle Cloud Reader library
 
 ## Install
 
+Kindle is not published on PyPI. Core's not-installed hint names
+`marginalia-ai-plugin-kindle`, but that package does not exist. Build a wheel
+from this checkout instead. Install it into the **same Python environment that
+runs `research-engine serve`**. Core never installs plugin code, and a plugin
+in another virtual environment is invisible to it.
+
 ```bash
-re plugin install github:MarginaliaAI/marginalia-plugin-kindle
+uv build --wheel --out-dir dist
+uv pip install --python /path/to/core/.venv/bin/python \
+  dist/marginalia_plugin_kindle-0.4.0-py3-none-any.whl
+playwright install chromium   # Playwright wheels ship no browser
 ```
 
-This installs Playwright and runs `playwright install chromium`.
+The wheel advertises one `research_engine.plugins` entry point (`kindle =
+kindle`) and carries its schema-v2 manifest at `kindle/plugin.yaml`. Core
+reads that manifest without importing Kindle code. Approve the exact installed
+artifact, then restart the MCP server:
+
+```bash
+research-engine plugin audit kindle    # permissions, tools, manifest hash
+research-engine plugin enable kindle
+```
+
+Run these from the core checkout whose `.env` names the database the MCP
+server uses: approvals live in that database. A row left by the pre-0.4
+`plugin install` flow audits as `legacy`, and `plugin enable kindle` replaces
+it. After reinstalling a changed version or manifest, use
+`research-engine plugin approve-upgrade kindle`; the loader skips a plugin
+whose installed version or manifest hash differs from its approval. Kindle
+declares no database, so there is nothing to migrate.
+
+In a uv-managed core workspace, `uv run` leaves this out-of-lock install in
+place, but an exact `uv sync` removes it. Reinstall afterwards.
 
 ## MCP tools
 
@@ -188,9 +216,27 @@ uv run --env-file "$OCR_CLIENT_ENV_FILE" --no-sync \
 ```
 
 Use `start` or `stop` in place of `status`. Kindle reads process environment
-variables; it does not load `.env` itself. The core/plugin launcher must load
-the same file into its environment too. Different worktrees may have different
-`.env` copies: do not assume `$PWD/.env` is the file you edited.
+variables; it does not load `.env` itself. Core's settings loader does not
+export `.env` into the environment either, so the MCP launcher must load the
+saved file. Different worktrees may have different `.env` copies: do not
+assume `$PWD/.env` is the file you edited. For a stdio MCP server started with
+`uv run`, layer the saved file under the checkout's own `.env`:
+
+```json
+{
+  "type": "stdio",
+  "command": "uv",
+  "args": ["run", "--env-file", "/absolute/path/to/saved.env",
+           "--env-file", ".env", "research-engine", "serve"]
+}
+```
+
+Later files win, and variables already in the launcher's environment win over
+both. Keeping the checkout's `.env` last keeps its own `RE_DB_URL`, so loading
+OCR settings cannot move the server to another database. The relative `.env`
+resolves against the server's working directory. With Claude Code, register
+this as a `local`-scope server of the same name, which overrides a project
+`.mcp.json` without editing it. Restart (reconnect) the server afterwards.
 
 `start` (also used before a remote scrape) reports `started`,
 `already-running`, or `skipped`. A healthy, compatible CUDA endpoint returns
@@ -303,10 +349,15 @@ uv run pytest -q
 uv run ruff check kindle tests
 ```
 
-The dev extra includes published core so the existing book-tool tests run too.
-At this change: **97 unit tests passed**, the full suite also passed **97/97**
-with no skips, and Ruff was clean. Without core installed, those three existing
-book-tool modules retain their optional skip behavior.
+The dev extra includes published core so the book-tool tests run too.
+`tests/integration/test_built_wheel.py` builds this checkout with `uv build`
+and installs the wheel into an empty target with `uv pip install`. Core's own
+discovery, activation, loader, and MCP list/call handlers then run against
+that install in a fresh interpreter, ending in a `kindle.check_book` call for
+an invented ASIN. It needs `uv` on `PATH`. At this change: **97 unit tests
+passed**, the full suite passed **103/103** with no skips, and Ruff was clean.
+Without core installed, the core-dependent modules keep their optional skip
+behavior.
 
 ## License
 
