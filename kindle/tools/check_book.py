@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from research_engine.plugins.sdk import tool
+from research_engine_sdk import tool
 
 from .._paths import text_path_for
 

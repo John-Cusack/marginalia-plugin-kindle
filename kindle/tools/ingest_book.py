@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import structlog
-from research_engine.plugins.sdk import tool
 from research_engine.services.ingestion.chunking.prose_window import ProseWindowChunker
+from research_engine_sdk import tool
 
 from .._paths import text_path_for
 from .._scrape import scrape_to_disk

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import structlog
-from research_engine.plugins.sdk import tool
+from research_engine_sdk import tool
 
 from .._scrape import scrape_to_disk
 

@@ -10,8 +10,13 @@ import pytesseract
 import structlog
 from PIL import Image
 
+from kindle.ocr_config import OcrSettings
+from kindle.ocr_control import ensure_ocr_host_ready
+from kindle.ocr_wire import PageImage
+
 from . import ocr as kindle_ocr
 from .anti_detect import humanize_mouse, jittered_delay
+from .ocr_remote import OcrBatchClient
 
 log = structlog.get_logger(__name__)
 
@@ -106,6 +111,7 @@ async def scrape_book(
         page_delay_min: Minimum delay between page turns.
         page_delay_max: Maximum delay between page turns.
         max_pages: Stop after this many pages (None = until end).
+        OCR offload is opt-in via KINDLE_OCR_BASE_URL; local OCR is the default.
 
     Returns:
         Dict with keys: title, page_count, text.
@@ -133,6 +139,20 @@ async def scrape_book(
 
     # Re-acquire content frame after navigation
     content_frame = await _get_content_frame(page)
+    try:
+        settings = OcrSettings.from_env() if is_kryptonite else OcrSettings()
+    except ValueError as exc:
+        log.warning("ocr_config_fallback", reason=type(exc).__name__)
+        settings = OcrSettings()
+    remote = OcrBatchClient(settings)
+    if is_kryptonite and remote.remote_enabled:
+        try:
+            outcome = await ensure_ocr_host_ready(settings)
+            log.info("ocr_host_ready", outcome=outcome)
+        except Exception as exc:
+            log.warning("ocr_host_fallback", reason=type(exc).__name__)
+            remote.remote_enabled = False
+
 
     all_text: list[str] = []
     seen_texts: set[str] = set()
@@ -140,24 +160,11 @@ async def scrape_book(
     consecutive_empty = 0
     max_consecutive_empty = 5
 
-    while True:
-        if max_pages is not None and page_count >= max_pages:
-            log.info("reached_max_pages", max_pages=max_pages)
-            break
+    pending: list[PageImage | None] = []
 
-        if is_kryptonite:
-            text = await _extract_text_kryptonite(page)
-        else:
-            try:
-                text = await content_frame.evaluate(_EXTRACT_TEXT_JS)
-                text = text.strip() if text else ""
-            except Exception as exc:
-                log.warning("text_extraction_failed", page=page_count, error=str(exc))
-                text = ""
-
-            if not text:
-                text = await _extract_text_via_ocr(content_frame)
-
+    def accept_text(text: str) -> bool:
+        nonlocal consecutive_empty, page_count
+        text = text.strip()
         if text and text not in seen_texts:
             seen_texts.add(text)
             all_text.append(text)
@@ -166,17 +173,50 @@ async def scrape_book(
         else:
             consecutive_empty += 1
             if consecutive_empty >= max_consecutive_empty:
-                log.info(
-                    "scraping_stopped_no_progress",
-                    consecutive_empty=consecutive_empty,
-                )
+                log.info("scraping_stopped_no_progress", consecutive_empty=consecutive_empty)
+                return False
+        page_count += 1
+        return True
+
+    async def flush() -> bool:
+        images = [image for image in pending if image is not None]
+        texts = iter(await remote.recognize(images))
+        batch = list(pending)
+        pending.clear()
+        return all(accept_text(next(texts) if image is not None else "") for image in batch)
+
+    while True:
+        captured = page_count + len(pending)
+        if max_pages is not None and captured >= max_pages:
+            log.info("reached_max_pages", max_pages=max_pages)
+            break
+
+        if is_kryptonite and remote.remote_enabled:
+            try:
+                pending.append(PageImage(captured, await _screenshot_kryptonite(page)))
+            except Exception as exc:
+                log.warning("kryptonite_screenshot_failed", reason=type(exc).__name__)
+                pending.append(None)
+            if len(pending) >= settings.batch_size and not await flush():
+                break
+        else:
+            if is_kryptonite:
+                text = await _extract_text_kryptonite(page)
+            else:
+                try:
+                    text = await content_frame.evaluate(_EXTRACT_TEXT_JS)
+                    text = text.strip() if text else ""
+                except Exception as exc:
+                    log.warning("text_extraction_failed", page=page_count, error=str(exc))
+                    text = ""
+                if not text:
+                    text = await _extract_text_via_ocr(content_frame)
+            if not accept_text(text):
                 break
 
-        page_count += 1
-
-        # Check if we're at the last page
+        # Check if we're at the last page; flush the final partial batch below.
         if await _is_last_page(page, content_frame):
-            log.info("reached_last_page", page=page_count)
+            log.info("reached_last_page", page=page_count + len(pending))
             break
 
         # Human-like behavior between page turns
@@ -191,6 +231,9 @@ async def scrape_book(
         # Re-acquire content frame in case it changed (no-op in Kryptonite mode)
         if not is_kryptonite:
             content_frame = await _get_content_frame(page)
+    if pending:
+        await flush()
+
 
     combined_text = "\n\n".join(all_text)
     log.info(
@@ -206,6 +249,21 @@ async def scrape_book(
         "page_count": page_count,
         "text": combined_text,
     }
+
+
+async def _screenshot_kryptonite(page) -> bytes:
+    """Crop chrome before transmission; PNG bytes never touch disk."""
+    viewport = page.viewport_size or {"width": 1280, "height": 900}
+    raw = await page.screenshot(type="png", full_page=False)
+    crop = (
+        0, _KRYPTONITE_HEADER_PX, viewport["width"],
+        max(0, viewport["height"] - _KRYPTONITE_FOOTER_PX),
+    )
+    with Image.open(io.BytesIO(raw)) as source:
+        image = source.crop(crop)
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+    return buf.getvalue()
 
 
 async def _is_kryptonite(page) -> bool:

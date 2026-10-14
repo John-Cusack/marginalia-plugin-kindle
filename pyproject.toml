@@ -1,6 +1,6 @@
 [project]
 name = "marginalia-plugin-kindle"
-version = "0.3.1"
+version = "0.4.0"
 description = "Kindle Cloud Reader scraper and ingestion plugin for Corpus Engine"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -8,15 +8,27 @@ dependencies = [
     "playwright>=1.40",
     "pytesseract>=0.3.10",
     "pillow>=10.0",
-    "easyocr>=1.7",
+    "easyocr==1.7.2",
+    "httpx>=0.27",
+    "structlog>=24.0",
+    "marginalia-ai-sdk>=0.6.1,<1",
 ]
 
 [project.optional-dependencies]
+ocr-server = [
+    # Only the GPU host needs the ASGI runtime.
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "ruff>=0.5",
+    "marginalia-ai>=0.6.2,<1",
 ]
+
+[project.entry-points."research_engine.plugins"]
+kindle = "kindle"
 
 [build-system]
 requires = ["hatchling"]

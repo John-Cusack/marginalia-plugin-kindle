@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.4.0 — Unreleased
+
+### Changed
+- **Installable as a core plugin.** The wheel now declares a
+  `research_engine.plugins` entry point (`kindle = kindle`) and packages its
+  schema-v2 manifest as `kindle/plugin.yaml`. Previously no installed artifact
+  was discoverable: the root `pack.yaml` was never packaged, and the
+  distribution had no entry point. Plugin id, the four tool ids and entries,
+  the `kindle_book` document type, and permissions are unchanged. Manifest
+  tool descriptions and schemas now equal the handlers' served metadata.
+- Install is now build wheel → install into core's environment →
+  `research-engine plugin enable kindle`. `re plugin install` no longer
+  exists. `playwright install chromium` is a manual step. README documents
+  loading the saved OCR `.env` in the MCP launcher without moving
+  `RE_DB_URL`.
+
+### Removed
+- Legacy root `pack.yaml`.
+
+### Added
+- Opt-in, in-memory numbered PNG batches for Kryptonite OCR on a remote CUDA
+  host, with local default and whole-batch fallback. Final partial batches,
+  page limits, deduplication, and no-progress termination retain page order.
+- Dedicated Kindle-owned FastAPI service and user systemd unit, versioned
+  EasyOCR 1.7.2/Craft/recognizer handshake, bounded uploads, serialized GPU
+  inference, and responsive health checks. No core server change.
+- Explicit `python -m kindle.ocr_control start|stop|status`: healthy and skipped
+  paths perform no host control; scrapes and failures never stop a service.
+- Environment-only endpoint, SSH target, model, batch, retry, and deadline
+  configuration. Deployment and privacy guidance in README.
+
+### Fixed
+- Use the public `research_engine_sdk` tool decorator instead of the removed
+  `research_engine.plugins.sdk` import, verified with published core 0.6.2.
+- Serialize local reader initialization/inference when remote fallback runs
+  in worker threads. Queued remote uploads wait before allocating a full body;
+  canceled requests keep the GPU slot until their worker finishes.
+- Deployment guidance uses direct Tailscale HTTP without a laptop tunnel,
+  remote-only unit restarts, and explicit client dotenv loading across worktrees.
+
+### Verification
+- `tests/integration/test_built_wheel.py`: the wheel built by `uv build` and
+  installed by `uv pip install` is discovered by core without importing Kindle
+  code. It is then approved, loaded from the install target, listed through
+  core's MCP handlers with the approved metadata, and called
+  (`kindle.check_book`, invented ASIN). Removing the entry point or the
+  packaged manifest fails it. Full suite 103/103, no skips.
+- Synthetic CUDA HTTP OCR returned invented page markers in order. Warm,
+  four-page 1280×780 synthetic batch: CPU 514.39 s, remote 0.963 s including
+  transport (534.2×); browser delays and model warm-up excluded. This synthetic
+  CPU workload was much slower than the established ~13 s/book-page observation;
+  it is not a real-book speedup forecast. Full method and settings in README.
+- Live laptop-to-GPU direct Tailscale OCR verified warm CUDA readiness and
+  ordered recognition of two invented page markers.
+
 ## 0.3.1 — 2026-05-05
 
 ### Fixed
